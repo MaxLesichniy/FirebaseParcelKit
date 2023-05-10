@@ -25,7 +25,6 @@
 
 #import "FIRFirebaseToManagedObject.h"
 #import <FirebaseDatabase/FirebaseDatabase.h>
-#import "PKConstants.h"
 #import "PKSyncManager.h"
 #import "NSNull+PKNull.h"
 
@@ -85,7 +84,9 @@ static NSString * const PKInvalidAttributeValueExceptionFormat = @"“%@.%@” e
                             [NSException raise:PKInvalidAttributeValueException format:PKInvalidAttributeValueExceptionFormat, entityName, propertyName, value, [NSString class], [value class]];
                         }
                     }
-                } else if (((attributeType == NSInteger16AttributeType) || (attributeType == NSInteger32AttributeType) || (attributeType == NSInteger64AttributeType)) && (![value isKindOfClass:[NSNumber class]])) {
+                } else if (((attributeType == NSInteger16AttributeType) ||
+                            (attributeType == NSInteger32AttributeType) ||
+                            (attributeType == NSInteger64AttributeType)) && (![value isKindOfClass:[NSNumber class]])) {
                     if ([value respondsToSelector:@selector(integerValue)]) {
                         value = [NSNumber numberWithInteger:[value integerValue]];
                     } else {

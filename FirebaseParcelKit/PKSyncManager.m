@@ -26,16 +26,15 @@
 #import "PKSyncManager.h"
 #import "FIRManagedObjectToFirebase.h"
 #import "FIRFirebaseToManagedObject.h"
-#import "ParcelKitSyncedObject.h"
 #import "PKDatabaseListener.h"
 #include <time.h>
 #include <xlocale.h>
 #import "NSNull+PKNull.h"
 
-NSString * const PKDefaultSyncAttributeName = @"syncID";
+NSString * const PKDefaultSyncIDAttributeName = @"syncID";
 NSString * const PKDefaultIsSyncedAttributeName = @"isSynced";
 NSString * const PKDefaultLastDeviceIdAttributeName = @"lastDeviceId";
-NSString * const PKDefaultRemoteTimestampAttributeName = @"remoteSyncTimestamp";
+NSString * const PKDefaultRemoteSyncTimestampAttributeName = @"remoteSyncTimestamp";
 NSString * const PKSyncManagerFirebaseStatusDidChangeNotification = @"PKSyncManagerFirebaseStatusDidChange";
 NSString * const PKSyncManagerFirebaseStatusKey = @"status";
 NSString * const PKSyncManagerFirebaseIncomingChangesNotification = @"PKSyncManagerFirebaseIncomingChanges";
@@ -78,11 +77,11 @@ NSString * const PKUpdateDocumentKey = @"document";
     self = [super init];
     if (self) {        
         _tablesKeyedByEntityName = [[NSMutableDictionary alloc] init];
-        _syncAttributeName = PKDefaultSyncAttributeName;
+        _syncIDAttributeName = PKDefaultSyncIDAttributeName;
         _isSyncedAttributeName = PKDefaultIsSyncedAttributeName;
         _observedContainers = [[NSMutableSet alloc] init];
         _lastDeviceIdAttributeName = PKDefaultLastDeviceIdAttributeName;
-        _remoteTimestampAttributeName = PKDefaultRemoteTimestampAttributeName;
+        _remoteSyncTimestampAttributeName = PKDefaultRemoteSyncTimestampAttributeName;
         _localDeviceId = [self generateLocalDeviceId];
         
         _currentSyncStatus = [[PKSyncStatus alloc] init];
@@ -225,8 +224,8 @@ NSString * const PKUpdateDocumentKey = @"document";
 - (void)setTable:(NSString *)tableID forEntityName:(NSString *)entityName
 {
     NSEntityDescription *entity = [NSEntityDescription entityForName:entityName inManagedObjectContext:self.managedObjectContext];
-    NSAttributeDescription *attributeDescription = [[entity attributesByName] objectForKey:self.syncAttributeName];
-    NSAssert([attributeDescription attributeType] == NSStringAttributeType, @"Entity “%@” must contain a string attribute named “%@”", entityName, self.syncAttributeName);
+    NSAttributeDescription *attributeDescription = [[entity attributesByName] objectForKey:self.syncIDAttributeName];
+    NSAssert([attributeDescription attributeType] == NSStringAttributeType, @"Entity “%@” must contain a string attribute named “%@”", entityName, self.syncIDAttributeName);
     [self.tablesKeyedByEntityName setObject:tableID forKey:entityName];
 }
 
@@ -353,7 +352,7 @@ NSString * const PKUpdateDocumentKey = @"document";
         NSError* error = nil;
         NSArray *objects = [self.managedObjectContext executeFetchRequest:fetchRequest error:&error];
         if (objects) {
-            DEBUG_LOG(@"Pushing %d unsynced object(s) for %@", (int)objects.count, entityName);
+            NSLog(@"Pushing %d unsynced object(s) for %@", (int)objects.count, entityName);
             if (objects.count > 0) {
                 self.currentSyncStatus.totalRecordsToUpload += objects.count;
                 
@@ -381,7 +380,7 @@ NSString * const PKUpdateDocumentKey = @"document";
                     // Mark these objects as synced
                     [self markObjectsAsSynced:objects];
                     
-                    DEBUG_LOG(@"Finished pushing unsynced objects for %@", entityName);
+                    NSLog(@"Finished pushing unsynced objects for %@", entityName);
                 });
             }            
         }
@@ -412,7 +411,7 @@ NSString * const PKUpdateDocumentKey = @"document";
     
     __weak typeof(self) weakSelf = self;
     
-    DEBUG_LOG(@"Initialise pull from container %@ (local device ID %@)", container.URL, self.localDeviceId);
+    NSLog(@"Initialise pull from container %@ (local device ID %@)", container.URL, self.localDeviceId);
     
     if (self.defaultContainerForObjects == nil) {
         self.defaultContainerForObjects = container;
@@ -427,7 +426,7 @@ NSString * const PKUpdateDocumentKey = @"document";
         NSString* tableName = [self tableForEntityName:entityName];
         FIRDatabaseReference* table = [container child:tableName];
         if (table != nil) {
-            DEBUG_LOG(@"Beginning observations of entityName %@ table name %@", entityName, tableName);
+            NSLog(@"Beginning observations of entityName %@ table name %@", entityName, tableName);
             
             [self addListener:[table observeEventType:FIRDataEventTypeChildAdded withBlock:^(FIRDataSnapshot * _Nonnull snapshot) {
                 
@@ -442,7 +441,7 @@ NSString * const PKUpdateDocumentKey = @"document";
                 [self processIncomingEvent:snapshot entityName:entityName];
             }] forContainer:container];
         } else {
-            DEBUG_LOG(@"Not able to begin observations of entityName %@ table name %@", entityName, tableName);
+            NSLog(@"Not able to begin observations of entityName %@ table name %@", entityName, tableName);
         }
     }
     
@@ -504,15 +503,14 @@ NSString * const PKUpdateDocumentKey = @"document";
 {
     NSFetchRequest *fetchRequest = [NSFetchRequest fetchRequestWithEntityName:entityName];
     [fetchRequest setFetchLimit:1];
-    
-    [fetchRequest setPredicate:[NSPredicate predicateWithFormat:@"%K == %@", self.syncAttributeName, record.key]];
+    [fetchRequest setPredicate:[NSPredicate predicateWithFormat:@"%K == %@", self.syncIDAttributeName, record.key]];
     
     NSError *error = nil;
     NSArray *managedObjects = [managedObjectContext executeFetchRequest:fetchRequest error:&error];
     if (managedObjects)  {
         return [managedObjects lastObject];
     } else {
-        DEBUG_LOG(@"Error executing fetch request: %@", error);
+        NSLog(@"Error executing fetch request: %@", error);
         return nil;
     }
 }
@@ -522,28 +520,29 @@ NSString * const PKUpdateDocumentKey = @"document";
     
     if (!managedObject) {
         managedObject = [NSEntityDescription insertNewObjectForEntityForName:entityName inManagedObjectContext:managedObjectContext];
-        [managedObject setValue:record.key forKey:self.syncAttributeName];
+        [managedObject setValue:record.key forKey:self.syncIDAttributeName];
     } else {
-        NSNumber* remoteTimestamp = [record.value objectForKey:self.remoteTimestampAttributeName];
-        NSNumber* currentRemoteTimestamp = [managedObject valueForKey:self.remoteTimestampAttributeName];
+        NSNumber* remoteTimestamp = [record.value objectForKey:self.remoteSyncTimestampAttributeName];
+        NSNumber* currentRemoteTimestamp = [managedObject valueForKey:self.remoteSyncTimestampAttributeName];
         if ((remoteTimestamp != nil) && ([remoteTimestamp isEqual:currentRemoteTimestamp])) {
             // Ignore updates where the timestamp hasn't changed - not a real update
             return;
         }
     }
     
-    [updates addObject:@{PKUpdateManagedObjectKey: managedObject, PKUpdateDocumentKey: record}];
+    [updates addObject:@{PKUpdateManagedObjectKey: managedObject,
+                         PKUpdateDocumentKey: record}];
 }
 
 - (void)processUpdates:(NSArray*)updates forEntityName:(NSString*)entityName inManagedObjectContext:(NSManagedObjectContext*)managedObjectContext {
-    DEBUG_LOG(@"Pulling %d changes to %@", (int)updates.count, entityName);
+    NSLog(@"Pulling %d changes to %@", (int)updates.count, entityName);
     
     for (NSDictionary *update in updates) {
         NSManagedObject *managedObject = update[PKUpdateManagedObjectKey];
         FIRDataSnapshot *record = update[PKUpdateDocumentKey];
         if (record != nil) {
-            DEBUG_LOG(@"- Pulling %@ %@", entityName, record.key);
-            [FIRFirebaseToManagedObject setManagedObjectPropertiesOn:managedObject withRecord:record syncAttributeName:self.syncAttributeName manager:self];
+            NSLog(@"- Pulling %@ %@", entityName, record.key);
+            [FIRFirebaseToManagedObject setManagedObjectPropertiesOn:managedObject withRecord:record syncAttributeName:self.syncIDAttributeName manager:self];
             
             if ((self.delegate != nil) && ([self.delegate respondsToSelector:@selector(managedObjectWasSyncedFromFirebase:syncManager:)])) {
                 // Give objects an opportunity to respond to the sync
@@ -562,7 +561,7 @@ NSString * const PKUpdateDocumentKey = @"document";
                 }
             }
         } else {
-            DEBUG_LOG(@"- Not pulling nil record %@", entityName);
+            NSLog(@"- Not pulling nil record %@", entityName);
         }
     }
     
@@ -588,7 +587,7 @@ NSString * const PKUpdateDocumentKey = @"document";
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(syncManagedObjectContextDidSave:) name:NSManagedObjectContextDidSaveNotification object:managedObjectContext];
         NSError *error = nil;
         if (![managedObjectContext save:&error]) {
-            DEBUG_LOG(@"Error saving managed object context: %@", error);
+            NSLog(@"Error saving managed object context: %@", error);
         }
         [[NSNotificationCenter defaultCenter] removeObserver:self name:NSManagedObjectContextDidSaveNotification object:managedObjectContext];
     }
@@ -717,11 +716,11 @@ NSString * const PKUpdateDocumentKey = @"document";
     
     NSSet *deletedObjects = [managedObjectContext deletedObjects];
     if (deletedObjects.count > 0) {
-        DEBUG_LOG(@"Total deleted object(s) are %d:", (int)deletedObjects.count);
+        NSLog(@"Total deleted object(s) are %d:", (int)deletedObjects.count);
         for (NSManagedObject* managedObject in deletedObjects) {
             NSString *entityName = [[managedObject entity] name];
-            NSString *syncID = [managedObject primitiveValueForKey:self.syncAttributeName];
-            DEBUG_LOG(@"* %@ %@", entityName, syncID);
+            NSString *syncID = [managedObject primitiveValueForKey:self.syncIDAttributeName];
+            NSLog(@"* %@ %@", entityName, syncID);
         }
     
         NSDictionary* syncableDeletedObjectsByTableName = [self syncableManagedObjectsByEntityNameFromManagedObjects:deletedObjects];
@@ -733,11 +732,11 @@ NSString * const PKUpdateDocumentKey = @"document";
                 dispatch_async(self.queue, ^{
                     for (NSManagedObject *managedObject in syncableObjects) {
                         NSString *tableID = [self tableForEntityName:[[managedObject entity] name]];
-                        NSString *syncID = [managedObject primitiveValueForKey:self.syncAttributeName];
+                        NSString *syncID = [managedObject primitiveValueForKey:self.syncIDAttributeName];
                         if (syncID.length > 0) {
                             FIRDatabaseReference* container = [self containerForObject:managedObject];
                             
-                            DEBUG_LOG(@"Syncing delete of %@ / %@ from %@", tableID, syncID, container.URL);
+                            NSLog(@"Syncing delete of %@ / %@ from %@", tableID, syncID, container.URL);
                             FIRDatabaseReference *table = [container child:tableID];
                             FIRDatabaseReference *record = [table child:syncID];
                             if (record) {
@@ -748,12 +747,12 @@ NSString * const PKUpdateDocumentKey = @"document";
                                 } withCompletionBlock:^(NSError * _Nullable error, FIRDatabaseReference * _Nonnull ref) {
                                     [self progressUploadedObject];
                                     if (error != nil) {
-                                        DEBUG_LOG(@"Error removing %@ record %@: %@", tableID, ref.key, error);
+                                        NSLog(@"Error removing %@ record %@: %@", tableID, ref.key, error);
                                     }
                                 }];
                             }
                         } else {
-                            DEBUG_LOG(@"Skipping delete of %@ with blank sync ID", tableID);
+                            NSLog(@"Skipping delete of %@ with blank sync ID", tableID);
                         }
                     };
                 });
@@ -770,7 +769,7 @@ NSString * const PKUpdateDocumentKey = @"document";
     for (NSString* tableID in self.sortedEntityNames) {
         NSSet* syncableObjects = [syncableUpdatedObjectsByTableName objectForKey:tableID];
         if (syncableObjects != nil) {
-            DEBUG_LOG(@"Pushing %d updated object(s) for %@", (int)syncableObjects.count, tableID);
+            NSLog(@"Pushing %d updated object(s) for %@", (int)syncableObjects.count, tableID);
             self.currentSyncStatus.totalRecordsToUpload += syncableObjects.count;
             
             dispatch_async(self.queue, ^{
@@ -808,7 +807,7 @@ NSString * const PKUpdateDocumentKey = @"document";
                 NSManagedObject* childObject = [subContext existingObjectWithID:managedObject.objectID error:&error];
                 if (childObject) {
                     if (![[childObject valueForKey:self.isSyncedAttributeName] boolValue]) {
-                        DEBUG_LOG(@"Setting isSynced for %@ %@", childObject.entity.name, [childObject valueForKey:self.syncAttributeName]);
+                        NSLog(@"Setting isSynced for %@ %@", childObject.entity.name, [childObject valueForKey:self.syncIDAttributeName]);
                         [childObject setValue:@YES forKey:self.isSyncedAttributeName];
                         hasChanges = YES;
                     }
@@ -851,24 +850,24 @@ NSString * const PKUpdateDocumentKey = @"document";
     NSString *entityName = [[managedObject entity] name];
     NSString *tableID = [self tableForEntityName:entityName];
     if (!tableID) {
-        DEBUG_LOG(@"Skipping push of unknown entity name %@", entityName);
+        NSLog(@"Skipping push of unknown entity name %@", entityName);
         return;
     }
     
     FIRDatabaseReference *table = [container child:tableID];
     
-    NSString* recordSyncID = [managedObject valueForKey:self.syncAttributeName];
+    NSString* recordSyncID = [managedObject valueForKey:self.syncIDAttributeName];
     
     if (recordSyncID.length == 0) {
-        DEBUG_LOG(@"Skipping sync of entity with blank sync ID");
+        NSLog(@"Skipping sync of entity with blank sync ID");
         return;
     }
     
     FIRDatabaseReference *record = [table child:recordSyncID];
     
-    DEBUG_LOG(@"Syncing %@ / %@ to %@", entityName, record.key, table.URL);
+    NSLog(@"Syncing %@ / %@ to %@", entityName, record.key, table.URL);
     
-    [FIRManagedObjectToFirebase setFieldsOnReference:record withManagedObject:managedObject syncAttributeName:self.syncAttributeName manager:self];
+    [FIRManagedObjectToFirebase setFieldsOnReference:record withManagedObject:managedObject syncAttributeName:self.syncIDAttributeName manager:self];
     
     if ((self.delegate != nil) && ([self.delegate respondsToSelector:@selector(managedObjectWasSyncedToFirebase:syncManager:)])) {
         // Call the delegate method
@@ -898,8 +897,8 @@ NSString * const PKUpdateDocumentKey = @"document";
             }
         }
         
-        if (![managedObject valueForKey:self.syncAttributeName]) {
-            [managedObject setPrimitiveValue:[[self class] syncID] forKey:self.syncAttributeName];
+        if (![managedObject valueForKey:self.syncIDAttributeName]) {
+            [managedObject setPrimitiveValue:[[self class] syncID] forKey:self.syncIDAttributeName];
         }
         
         // See if the record has materially changed
@@ -909,7 +908,7 @@ NSString * const PKUpdateDocumentKey = @"document";
             hasChanges = [self.delegate syncManager:self hasManagedObjectChanged:managedObject];
         }
         if (!hasChanges) {
-            DEBUG_LOG(@"Skipping %@ %@ with no changes: %@", managedObject.entity.name, [managedObject valueForKey:self.syncAttributeName], managedObject.changedValues.allKeys);
+            NSLog(@"Skipping %@ %@ with no changes: %@", managedObject.entity.name, [managedObject valueForKey:self.syncIDAttributeName], managedObject.changedValues.allKeys);
             continue;
         }
         

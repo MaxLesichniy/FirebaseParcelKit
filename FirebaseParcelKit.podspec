@@ -8,7 +8,8 @@ Pod::Spec.new do |s|
   s.source       = { :git => "https://github.com/andygeers/FirebaseParcelKit.git", :tag => s.version.to_s }
   s.platform     = :ios, '7.0'
   s.source_files = 'FirebaseParcelKit/*.{h,m}'
-  s.frameworks   = 'CoreData', 'FirebaseDatabase'
+  s.frameworks   = 'CoreData'
   s.requires_arc = true
-  s.xcconfig = { 'FRAMEWORK_SEARCH_PATHS' => '"${PODS_ROOT}/Firebase"' }
+  s.dependency 'FirebaseDatabase'
+
 end

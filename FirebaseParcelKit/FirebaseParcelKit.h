@@ -23,9 +23,7 @@
 //  THE SOFTWARE.
 //
 
-#import <FirebaseParcelKit/PKConstants.h>
 #import <FirebaseParcelKit/PKSyncManager.h>
 #import <FirebaseParcelKit/FIRManagedObjectToFirebase.h>
 #import <FirebaseParcelKit/FIRFirebaseToManagedObject.h>
-#import <FirebaseParcelKit/ParcelKitSyncedObject.h>
 #import <FirebaseParcelKit/PKDatabaseListener.h>

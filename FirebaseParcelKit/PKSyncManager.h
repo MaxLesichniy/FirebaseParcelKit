@@ -44,7 +44,7 @@
 - (BOOL)syncManager:(PKSyncManager *)syncManager hasManagedObjectChanged:(NSManagedObject *)managedObject;
 @end
 
-extern NSString * const PKDefaultSyncAttributeName;
+extern NSString * const PKDefaultSyncIDAttributeName;
 extern NSString * const PKDefaultIsSyncedAttributeName;
 
 /**
@@ -99,7 +99,7 @@ extern NSString * const PKSyncManagerFirebaseIncomingChangesKey;
  
  The default value is “syncID”.
 */
-@property (nonatomic, copy) NSString *syncAttributeName;
+@property (nonatomic, copy) NSString *syncIDAttributeName;
 
 /**
  The Core Data entity attribute name to use for keeping managed objects in sync.
@@ -120,7 +120,7 @@ extern NSString * const PKSyncManagerFirebaseIncomingChangesKey;
  
  The default value is "remoteSyncTimestamp".
  */
-@property (nonatomic, copy) NSString *remoteTimestampAttributeName;
+@property (nonatomic, copy) NSString *remoteSyncTimestampAttributeName;
 
 
 /**

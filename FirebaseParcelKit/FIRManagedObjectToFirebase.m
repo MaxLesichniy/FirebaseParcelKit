@@ -24,9 +24,7 @@
 //
 
 #import "FIRManagedObjectToFirebase.h"
-#import "PKConstants.h"
 #import "FIRFirebaseToManagedObject.h"
-#import "ParcelKitSyncedObject.h"
 #import "NSNull+PKNull.h"
 
 #ifndef PKMaximumBinaryDataChunkLengthInBytes
@@ -145,7 +143,7 @@
     [newProperties setObject:manager.localDeviceId forKey:manager.lastDeviceIdAttributeName];
     
     // Set a timestamp so that we can tell when a record has actually updated
-    [newProperties setObject:[FIRServerValue timestamp] forKey:manager.remoteTimestampAttributeName];
+    [newProperties setObject:[FIRServerValue timestamp] forKey:manager.remoteSyncTimestampAttributeName];
     
     // Update the properties (without erasing any other keys that were there already)
     [reference updateChildValues:newProperties withCompletionBlock:^(NSError * _Nullable error, FIRDatabaseReference * _Nonnull ref) {
